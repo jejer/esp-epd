@@ -1,0 +1,25 @@
+#ifndef EPDIF_H
+#define EPDIF_H
+
+#include "driver/spi_master.h"
+
+typedef struct {
+    int mosi_io_num;
+    int sclk_io_num;
+    int dc_io_num;
+    int cs_io_num;
+    int busy_io_num;
+    int rst_io_num;
+    int vcc_io_num;
+} epd_pin_config_t;
+
+extern epd_pin_config_t epd_pin_cfg;
+
+int epdif_init(uint32_t width, uint32_t height);
+void epdif_delayms(uint32_t delaytime);
+void epdif_wait_until_idle();
+void epdif_send_command(uint8_t cmd);
+void epdif_send_byte_data(uint8_t data);
+void epdif_send_data(const uint8_t *data, uint32_t len);
+
+#endif
