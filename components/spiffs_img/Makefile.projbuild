@@ -1,0 +1,20 @@
+SPIFFS_IMAGE_COMPONENT_PATH := $(COMPONENT_PATH)
+ifeq ($(OS),Windows_NT)
+	MKSPIFFS_BIN="mkspiffs.exe"
+else
+	MKSPIFFS_BIN="mkspiffs"
+endif
+
+.PHONY: flashfs
+.PHONY: makefs
+
+makefs: $(SDKCONFIG_MAKEFILE)
+	@echo "Making spiffs image ..."
+	@echo "Install mkfspiffs if needed: https://github.com/igrr/mkspiffs/releases/download/0.2.3/mkspiffs-0.2.3-esp-idf-linux64.tar.gz"
+	@echo "$(MKSPIFFS_BIN) -c $(SPIFFS_IMAGE_COMPONENT_PATH)/files -b 4096 -p $(CONFIG_SPIFFS_PAGE_SIZE) -s 0x100000 $(BUILD_DIR_BASE)/spiffs.bin"
+	$(MKSPIFFS_BIN) -c $(SPIFFS_IMAGE_COMPONENT_PATH)/files -b 4096 -p $(CONFIG_SPIFFS_PAGE_SIZE) -s 0x100000 $(BUILD_DIR_BASE)/spiffs.bin
+
+flashfs: $(BUILD_DIR_BASE)/spiffs.bin
+	@echo "Flashing spiffs image ..."
+	@echo "$(ESPTOOLPY_WRITE_FLASH) 0x110000 $(BUILD_DIR_BASE)/spiffs.bin"
+	$(ESPTOOLPY_WRITE_FLASH) 0x110000 $(BUILD_DIR_BASE)/spiffs.bin

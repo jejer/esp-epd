@@ -1,15 +1,18 @@
 #include "epdif.h"
-#include "driver/gpio.h"
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "esp_system.h"
+#include "driver/gpio.h"
 #include "driver/spi_master.h"
+#include "esp_system.h"
+
 #include <string.h>
 
-epd_pin_config_t epd_pin_cfg;
-spi_device_handle_t epd_spi;
+static epdif_pin_config_t epd_pin_cfg;
+static spi_device_handle_t epd_spi;
 
-int epdif_init(uint32_t width, uint32_t height) {
+void epdif_init(epdif_pin_config_t *pin_cfg, uint32_t width, uint32_t height) {
+    memcpy(&epd_pin_cfg, pin_cfg, sizeof(epdif_pin_config_t));
     gpio_set_direction(epd_pin_cfg.rst_io_num, GPIO_MODE_OUTPUT);
     gpio_set_level(epd_pin_cfg.rst_io_num, 0);
     gpio_set_direction(epd_pin_cfg.dc_io_num, GPIO_MODE_OUTPUT);
@@ -42,16 +45,22 @@ int epdif_init(uint32_t width, uint32_t height) {
     ret=spi_bus_add_device(HSPI_HOST, &devcfg, &epd_spi);
     ESP_ERROR_CHECK(ret);
     printf("SPI: display device added to spi bus\r\n");
-    return 0;
 }
 
-void epdif_delayms(uint32_t delaytime) {
+void epdif_reset() {
+    gpio_set_level(epd_pin_cfg.rst_io_num, 0);
+    epdif_delay_ms(200);
+    gpio_set_level(epd_pin_cfg.rst_io_num, 1);
+    epdif_delay_ms(200);
+}
+
+void epdif_delay_ms(uint32_t delaytime) {
     vTaskDelay(delaytime / portTICK_PERIOD_MS);
 }
 
 void epdif_wait_until_idle() {
     while(gpio_get_level(epd_pin_cfg.busy_io_num) == 1) {      //LOW: idle, HIGH: busy
-        epdif_delayms(100);
+        epdif_delay_ms(100);
     }
 }
 
@@ -65,7 +74,7 @@ void epdif_send_command(uint8_t cmd) {
     t.tx_data[0]=cmd;               //Data
     t.flags=SPI_TRANS_USE_TXDATA;
     ret=spi_device_polling_transmit(epd_spi, &t);  //Transmit!
-    assert(ret==ESP_OK);            //Should have had no issues.
+    ESP_ERROR_CHECK(ret);
 }
 
 void epdif_send_byte_data(uint8_t data) {
@@ -78,7 +87,7 @@ void epdif_send_byte_data(uint8_t data) {
     t.tx_data[0]=data;               //Data
     t.flags=SPI_TRANS_USE_TXDATA;
     ret=spi_device_polling_transmit(epd_spi, &t);  //Transmit!
-    assert(ret==ESP_OK);            //Should have had no issues.
+    ESP_ERROR_CHECK(ret);
 }
 
 void epdif_send_data(const uint8_t *data, uint32_t len) {
@@ -91,5 +100,5 @@ void epdif_send_data(const uint8_t *data, uint32_t len) {
     t.length=len*8;                 //Len is in bytes, transaction length is in bits.
     t.tx_buffer=data;               //Data
     ret=spi_device_polling_transmit(epd_spi, &t);  //Transmit!
-    assert(ret==ESP_OK);            //Should have had no issues.
+    ESP_ERROR_CHECK(ret);
 }

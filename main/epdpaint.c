@@ -1,11 +1,17 @@
 #include "epdpaint.h"
+
 #include "epd2in9.h"
 #include "utf8_gb2312.h"
+
 #include <string.h>
 
+static int epdpaint_display_rotate;
+static uint8_t* epdpaint_frame_buffer;
 
-int epdpaint_display_rotate = ROTATE_270;
-unsigned char* epdpaint_frame_buffer = 0;
+void epdpaint_init(uint8_t* frame_buffer, int rotate) {
+    epdpaint_frame_buffer = frame_buffer;
+    epdpaint_display_rotate = rotate;
+}
 
 void epdpaint_draw_absolute_pixel(int x, int y, int colored) {
     if (x < 0 || x >= EPD_WIDTH || y < 0 || y >= EPD_HEIGHT) {
@@ -67,7 +73,7 @@ void epdpaint_draw_pixel(int x, int y, int colored) {
     }
 }
 
-void epdpaint_draw_ascii_char(int x, int y, char ascii_char, epd_font* font, int colored) {
+void epdpaint_draw_ascii_char(int x, int y, char ascii_char, epd_font_t* font, int colored) {
     unsigned int char_offset = (ascii_char - ' ') * font->height * (font->width / 8 + (font->width % 8 ? 1 : 0));
     const unsigned char* ptr = &font->table[char_offset];
 
@@ -86,16 +92,16 @@ void epdpaint_draw_ascii_char(int x, int y, char ascii_char, epd_font* font, int
     }
 }
 
-void epdpaint_draw_gb2312_char(int x, int y, unsigned short gb2312_char, epd_font* font, int colored) {
+void epdpaint_draw_gb2312_char(int x, int y, uint16_t gb2312_char, epd_font_t* font, int colored) {
     int gb2312_row = (gb2312_char >> 8) - 0xA0;
     int gb2312_col = (gb2312_char & 0xFF) - 0xA0;
     unsigned int char_offset = (94 * (gb2312_row - 1) + (gb2312_col - 1)) * 32;
 
-    unsigned char buffer[(font->width/8) * font->height];
+    uint8_t buffer[(font->width/8) * font->height];
     fseek(font->file, char_offset, SEEK_SET);
     fread(buffer, sizeof(buffer), 1, font->file);
 
-    const unsigned char* ptr = buffer;
+    const uint8_t* ptr = buffer;
     for (int j = 0; j < font->height; j++) {
         for (int i = 0; i < font->width; i++) {
             if (*ptr & (0x80 >> (i % 8))) {
@@ -111,7 +117,7 @@ void epdpaint_draw_gb2312_char(int x, int y, unsigned short gb2312_char, epd_fon
     }
 }
 
-void epdpaint_draw_utf8_string(int x, int y, const char* text, epd_font* en_font, epd_font* zh_font, int colored) {
+void epdpaint_draw_utf8_string(int x, int y, const char* text, epd_font_t* en_font, epd_font_t* zh_font, int colored) {
     const char* p_text = text;
     int refcolumn = x;
     while (*p_text != 0) {

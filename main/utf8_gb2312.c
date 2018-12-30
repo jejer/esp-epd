@@ -2,13 +2,13 @@
 
 typedef struct unicode_gb
 {
-    unsigned short unicode;
-    unsigned short gb;
+    uint16_t unicode;
+    uint16_t gb;
 } UNICODE_GB;
 
 #define CODE_TABLE_SIZE 6768
 
-UNICODE_GB code_table[] =
+static const UNICODE_GB code_table[] =
 {
     { 0x4E00, 0xD2BB },
     { 0x4E01, 0xB6A1 },
@@ -6780,7 +6780,7 @@ UNICODE_GB code_table[] =
     { 0xE814, 0xD7FE }
 };
 
-unsigned short search_code_table(unsigned short unicode) {
+static uint16_t search_code_table(uint16_t unicode) {
     int first = 0;
     int end = CODE_TABLE_SIZE - 1;
     int mid = 0;
@@ -6797,12 +6797,12 @@ unsigned short search_code_table(unsigned short unicode) {
     return 0;
 }
 
-unsigned short utf8_to_gb2312(const char* utf8) {
-    unsigned char unicode[2];
-    // UTF8->Unicode
+uint16_t utf8_to_gb2312(const char* utf8) {
+    uint8_t unicode[2];
+    // UTF8 -> Unicode
     unicode[1] = ((utf8[0] & 0x0F) << 4) | ((utf8[1] >> 2) & 0x0F);
     unicode[0] = ((utf8[1] & 0x03) << 6) + (utf8[2] & 0x3F);
 
     // search gb2312
-    return search_code_table(*(unsigned short*)unicode);
+    return search_code_table(*(uint16_t*)unicode);
 }

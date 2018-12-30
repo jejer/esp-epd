@@ -1,6 +1,6 @@
 #include "epdfont.h"
 
-const unsigned char font16_table[] = 
+static const uint8_t font16_table[] = 
 {
 	// @0 ' ' (11 pixels wide)
 	0x00, 0x00, //            
@@ -1713,7 +1713,7 @@ const unsigned char font16_table[] =
 	0x00, 0x00, //            
 };
 
-epd_font epd_font_ascii_16 = {
+epd_font_t epd_font_ascii_16 = {
     .table = font16_table,
     .width = 11,
     .height = 16,
