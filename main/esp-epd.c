@@ -2,6 +2,7 @@
 #include "epd2in9.h"
 #include "epdpaint.h"
 #include "epdfont.h"
+#include "ws_client.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -47,6 +48,80 @@ void print_bytes(void *ptr, int size)
     printf("\n");
 }
 
+static bool pushbullet_mirror_msg(char *json) {
+    cJSON *root = cJSON_Parse(json);
+    if (!root) return false;
+    cJSON *root_type = cJSON_GetObjectItemCaseSensitive(root, "type");
+    if (!root_type || strncmp(root_type->valuestring, "push", 4) != 0) {cJSON_Delete(root); return true;}
+
+    cJSON *push = cJSON_GetObjectItemCaseSensitive(root, "push");
+    if (!push) {cJSON_Delete(root); return true;}
+
+    cJSON *push_type = cJSON_GetObjectItemCaseSensitive(push, "type");
+    if (!push_type || strncmp(push_type->valuestring ,"mirror", 6) != 0) {cJSON_Delete(root); return true;}
+
+    cJSON *body = cJSON_GetObjectItemCaseSensitive(push, "body");
+    if (!body || body->type != cJSON_String) {cJSON_Delete(root); return true;}
+
+    printf(body->valuestring);
+    cJSON_Delete(root); return true;
+}
+
+static esp_err_t ws_handler(ws_event_t *event) {
+    static char *text_merged = NULL;
+    if (!text_merged) {text_merged = malloc(1024*3); memset(text_merged, 0, 1024*3);}
+    if (!text_merged) ESP_ERROR_CHECK(ESP_ERR_NO_MEM);
+
+    switch (event->event_id) {
+        case WS_EVENT_ERROR:
+            ESP_LOGE(TAG, "WS_EVENT_ERROR");
+            break;
+        case WS_EVENT_CONNECTED:
+            ESP_LOGI(TAG, "WS_EVENT_CONNECTED");
+            break;
+        case WS_EVENT_DISCONNECTED:
+            ESP_LOGW(TAG, "WS_EVENT_DISCONNECTED");
+            break;
+        case WS_EVENT_DATA:
+            ESP_LOGI(TAG, "WS_EVENT_DATA");
+            //print_bytes(event->data, event->data_len);
+            ESP_LOGI(TAG, "TEXT LEN: %d", event->data_len);
+            ESP_LOGI(TAG, "TEXT: %.*s", event->data_len, event->data);
+            if (event->data_len > 1500) {
+                ESP_LOGI(TAG, "TEXT LEN TOO BIG");
+                memset(text_merged, 0, 1024*3);
+                break;
+            }
+            if (strlen(text_merged) == 0 && event->data[0] == '{') {
+                ESP_LOGI(TAG, "TEXT 1st PART");
+                strncpy(text_merged, (const char *)event->data, event->data_len);
+                ESP_LOGI(TAG, "TEXT 1st PART, strlen(text_merged) = %d", strlen(text_merged));
+                ESP_LOGI(TAG, "%s", text_merged);
+                if (pushbullet_mirror_msg(text_merged)) {
+                    ESP_LOGI(TAG, "TEXT PARSED");
+                    memset(text_merged, 0, 1024*3);
+                }
+            } else if (strlen(text_merged) > 0 && event->data[event->data_len-1] == '}') {
+                ESP_LOGI(TAG, "TEXT 2nd PART");
+                strncpy(text_merged + strlen(text_merged), (const char *)event->data, event->data_len);
+                pushbullet_mirror_msg(text_merged);
+                ESP_LOGI(TAG, "TEXT 2nd PART COMPLETE");
+                memset(text_merged, 0, 1024*3);
+            } else {
+                ESP_LOGI(TAG, "OTHER CASE!!");
+                ESP_LOGI(TAG, "strlen(text_merged) = %d", strlen(text_merged));
+                ESP_LOGI(TAG, "last 10 chars: %.*s", 10, event->data+event->data_len-10);
+                ESP_LOGI(TAG, "last char: %c", event->data[event->data_len-1]);
+                memset(text_merged, 0, 1024*3);
+            }
+            memset(event->data, 0, 2*1024);
+            break;
+        default:
+            break;
+    }
+    return ESP_OK;
+}
+
 char * get_commit() {
     xEventGroupWaitBits(s_wifi_event_group, WIFI_CONNECTED_BIT, false, true, portMAX_DELAY);
 
@@ -57,7 +132,7 @@ char * get_commit() {
     esp_http_client_handle_t client = esp_http_client_init(&config);
     esp_http_client_set_header(client, "Accept", "application/vnd.github.v3+json");
 
-    // currently esp_http_client_perform() could not handle (content_len + header_len) or MTU > buffer_size. use stream mode to read.
+    // currently esp_http_client_perform() could not handle (content_len + header_len) > (buffer_size or MTU). use stream mode to read.
     if ((err = esp_http_client_open(client, 0)) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
         return NULL;
@@ -101,6 +176,15 @@ void app_main() {
     
     ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
     wifi_init_sta();
+
+    xEventGroupWaitBits(s_wifi_event_group, WIFI_CONNECTED_BIT, false, true, portMAX_DELAY);
+    ws_client_config_t ws_cfg = {
+        .uri = "wss://stream.pushbullet.com/websocket/<your token here>",
+        .event_handle = ws_handler,
+    };
+    ws_client_handle_t ws_client = ws_client_init(&ws_cfg);
+    ret = ws_client_start(ws_client);
+    ESP_ERROR_CHECK(ret);
 
     // init NTP
     initialize_sntp();
@@ -200,6 +284,7 @@ void app_main() {
     epdpaint_draw_utf8_string(0, 40, get_commit(), &epd_font_ascii_16, &hzk16, BLACK);
     epd_set_frame_memory(frame_buff);
     epd_display_frame();
+    epd_set_frame_memory(frame_buff);
     epd_sleep();
 }
 
