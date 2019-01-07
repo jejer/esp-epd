@@ -73,8 +73,8 @@ void epdpaint_draw_pixel(int x, int y, int colored) {
     }
 }
 
-void epdpaint_draw_ascii_char(int x, int y, char ascii_char, epd_font_t* font, int colored) {
-    unsigned int char_offset = (ascii_char - ' ') * font->height * (font->width / 8 + (font->width % 8 ? 1 : 0));
+void epdpaint_draw_asc_char(int x, int y, char asc_char, epd_font_t* font, int colored) {
+    unsigned int char_offset = (asc_char - ' ') * font->height * (font->width / 8 + (font->width % 8 ? 1 : 0));
     const unsigned char* ptr = &font->table[char_offset];
 
     for (int j = 0; j < font->height; j++) {
@@ -95,9 +95,9 @@ void epdpaint_draw_ascii_char(int x, int y, char ascii_char, epd_font_t* font, i
 void epdpaint_draw_gb2312_char(int x, int y, uint16_t gb2312_char, epd_font_t* font, int colored) {
     int gb2312_row = (gb2312_char >> 8) - 0xA0;
     int gb2312_col = (gb2312_char & 0xFF) - 0xA0;
-    unsigned int char_offset = (94 * (gb2312_row - 1) + (gb2312_col - 1)) * 32;
-
     uint8_t buffer[(font->width/8) * font->height];
+    unsigned int char_offset = (94 * (gb2312_row - 1) + (gb2312_col - 1)) * sizeof(buffer);
+
     fseek(font->file, char_offset, SEEK_SET);
     fread(buffer, sizeof(buffer), 1, font->file);
 
@@ -117,22 +117,35 @@ void epdpaint_draw_gb2312_char(int x, int y, uint16_t gb2312_char, epd_font_t* f
     }
 }
 
-void epdpaint_draw_utf8_string(int x, int y, const char* text, epd_font_t* en_font, epd_font_t* zh_font, int colored) {
+void epdpaint_draw_utf8_string(int x, int y, int width, int height, const char* text, epd_font_t* en_font, epd_font_t* zh_font, int colored) {
     const char* p_text = text;
-    int refcolumn = x;
+    int x_offset = x;
+    int y_offset = y;
+    int x_painted = 0;
+    int y_painted = 0;
     while (*p_text != 0) {
+        // line wrap
+        if (x_painted + zh_font->width > width) {
+            x_painted = 0;
+            x_offset = x;
+            y_painted += zh_font->height;
+            y_offset += zh_font->height;
+        }
+        // out of height
+        if (y_painted + zh_font->height > height) {
+            return;
+        }
         if ((*p_text & 0x80) == 0) {  // ascii
-            epdpaint_draw_ascii_char(refcolumn, y, *p_text, en_font, colored);
-            refcolumn += en_font->width;
+            epdpaint_draw_asc_char(x_offset, y_offset, *p_text, en_font, colored);
+            x_offset += en_font->width;
             p_text++;
         } else if ((*p_text & 0xE0) == 0xE0) {  // chinese
-            epdpaint_draw_gb2312_char(refcolumn, y, utf8_to_gb2312(p_text), zh_font, colored);
-            refcolumn += zh_font->width;
+            epdpaint_draw_gb2312_char(x_offset, y_offset, utf8_to_gb2312(p_text), zh_font, colored);
+            x_offset += zh_font->width;
             p_text+=3;
         } else {
             p_text++;
         }
-
     }
 }
 

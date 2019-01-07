@@ -108,7 +108,7 @@ void epd_set_image_memory(const uint8_t* image_buffer, int x, int y, int width, 
     x &= 0xF8;
     width &= 0xF8;
 
-    if (image_buffer == NULL || x < 0 || width < 1 || y < 0 || height < 1) {
+    if (!image_buffer || x < 0 || width < 1 || y < 0 || height < 1) {
         return;
     }
 
@@ -136,7 +136,7 @@ void epd_set_image_memory(const uint8_t* image_buffer, int x, int y, int width, 
 }
 
 void epd_set_frame_memory(const uint8_t* frame_buffer) {
-    if (frame_buffer == NULL) {
+    if (!frame_buffer) {
         return;
     }
 

@@ -2,14 +2,20 @@ menu "ESP-EPD Configuration"
 
 config ESP_WIFI_SSID
     string "WiFi SSID"
-    default "myssid"
+    default ""
     help
-    SSID (network name) for the example to connect to.
+    SSID (network name) to connect to.
 
 config ESP_WIFI_PASSWORD
     string "WiFi Password"
-    default "mypassword"
+    default ""
     help
-    WiFi password (WPA or WPA2) for the example to use.
+    WiFi password (WPA or WPA2) to use.
+
+config PUSHBULLET_TOKEN
+    string "PushBullet Access Token"
+    default ""
+    help
+    PushBullet Token to use. https://docs.pushbullet.com/#api-quick-start
 
 endmenu

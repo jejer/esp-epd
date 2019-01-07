@@ -1,5 +1,5 @@
-#ifndef EPDIF_H
-#define EPDIF_H
+#ifndef _EPDIF_H_
+#define _EPDIF_H_
 
 #include <stdint.h>
 

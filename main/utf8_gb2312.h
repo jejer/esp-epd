@@ -1,5 +1,5 @@
-#ifndef UTF8_GB2312_H
-#define UTF8_GB2312_H
+#ifndef _UTF8_GB2312_H_
+#define _UTF8_GB2312_H_
 
 #include <stdint.h>
 
