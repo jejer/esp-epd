@@ -81,8 +81,8 @@ void app_main() {
     ws_client_config_t ws_cfg = {
         .uri = "wss://stream.pushbullet.com/websocket/"CONFIG_PUSHBULLET_TOKEN,
         .event_handle = ws_handler,
-        .out_buffer = calloc(1, 3*1024),
-        .out_buffer_size = 3*1024,
+        .out_buffer = calloc(1, 5*1024),
+        .out_buffer_size = 5*1024,
     };
     ws_client_handle_t ws_client = ws_client_init(&ws_cfg);
     ret = ws_client_start(ws_client);
