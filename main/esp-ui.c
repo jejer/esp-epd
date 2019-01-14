@@ -3,21 +3,18 @@
 #include "epd2in9.h"
 #include "epdfont.h"
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_spiffs.h"
-#include "esp_heap_caps.h"
 
 #include <string.h>
 #include <time.h>
 #include <sys/time.h>
 
+#define ROTATE ROTATE_270
 static const char *TAG = "ESP-UI";
 
 ui_data_t ui_data;
 static epd_font_t hzk;
-static portMUX_TYPE paint_lock = portMUX_INITIALIZER_UNLOCKED;
 
 int esp_ui_init() {
     // init hzk chinese gb2312 font
@@ -33,28 +30,17 @@ int esp_ui_init() {
     return true;
 }
 
-void esp_ui_update() {
-    // allocate EPD frame buffer
-    uint8_t *frame_buff = heap_caps_malloc((EPD_WIDTH/8) * EPD_HEIGHT, MALLOC_CAP_DMA);
-    if (!frame_buff) {
-        ESP_LOGE(TAG, "no memory for frame buffer");
-        return;
-    }
-
-    //portENTER_CRITICAL_ISR(&paint_lock);
-
+void esp_ui_full_paint() {
+    ui_data.refresh_counter++;
     // init display
-    ESP_LOGI(TAG, "partial_display_cnt(%d)", ui_data.partial_display_cnt);
-    if (ui_data.partial_display_cnt++ % 10 == 0) {
-        ui_data.partial_display_cnt = 0;
-        epd_init(EPD_2IN9_LUT_UPDATE_FULL);
-    } else epd_init(EPD_2IN9_LUT_UPDATE_PART);
+    epd_init(EPD_2IN9_LUT_UPDATE_FULL);
 
-    // init paint
-    epdpaint_init(frame_buff, ROTATE_270);
+    // create painter
+    esp_painter_handle_t painter = epdpaint_init(ROTATE, 0, 0, EPD_HEIGHT, EPD_WIDTH);
+    if (!painter) return;
 
     // start paint
-    epdpaint_clear(WHITE);
+    epdpaint_clear(painter, WHITE);
 
     // paint time
     time_t now = 0;
@@ -63,8 +49,8 @@ void esp_ui_update() {
     localtime_r(&now, &timeinfo);
     char strftime_buf[6];
     strftime(strftime_buf, 6, "%H:%M", &timeinfo);
-    printf(strftime_buf);
-    epdpaint_draw_utf8_string(EPD_HEIGHT-5*epd_font_asc_16.width,
+    epdpaint_draw_utf8_string(painter,
+                              EPD_HEIGHT-5*epd_font_asc_16.width,
                               EPD_WIDTH-epd_font_asc_16.height,
                               5*epd_font_asc_16.width,
                               epd_font_asc_16.height,
@@ -72,14 +58,56 @@ void esp_ui_update() {
                               &epd_font_asc_16, 0, BLACK);
 
     // paint pushbullet message
-    epdpaint_draw_utf8_string(0, 0, 296, 128, ui_data.message, &epd_font_asc_16, &hzk, BLACK);
+    epdpaint_draw_utf8_string(painter, 0, 0, 296, 128, ui_data.message, &epd_font_asc_16, &hzk, BLACK);
 
-    epd_set_frame_memory(frame_buff);
+    epd_set_frame_memory(painter->buffer);
+    epd_display_frame();
+    epd_set_frame_memory(painter->buffer);
+    epd_sleep();
+
+    epdpaint_destroy(painter);
+
+    return;
+}
+
+// partial display format: 23:23
+void esp_ui_paint_time() {
+    // check refresh mode
+    ESP_LOGI(TAG, "refresh_counter(%d)", ui_data.refresh_counter);
+    if (ui_data.refresh_counter % 10 == 0) {
+        return esp_ui_full_paint();
+    }
+    ui_data.refresh_counter++;
+    epd_init(EPD_2IN9_LUT_UPDATE_PART);
+
+    epd_font_t *time_fnt = &epd_font_asc_16;
+
+    // create painter
+    esp_painter_handle_t painter = epdpaint_init(ROTATE, EPD_HEIGHT-5*time_fnt->width, EPD_WIDTH-time_fnt->height, (time_fnt->width*5), time_fnt->height);
+    if (!painter) {
+        ESP_LOGE(TAG, "no memory for painter");
+        return;
+    }
+
+    // start paint
+    epdpaint_clear(painter, WHITE);
+
+    // paint time
+    time_t now = 0;
+    time(&now);
+    struct tm timeinfo = { 0 };
+    localtime_r(&now, &timeinfo);
+    char strftime_buf[6];
+    strftime(strftime_buf, 6, "%H:%M", &timeinfo);
+    epdpaint_draw_utf8_string(painter, 0, 0,
+                              5*time_fnt->width,
+                              time_fnt->height,
+                              strftime_buf,
+                              time_fnt, 0, BLACK);
+
+    epd_set_image_memory(painter->buffer, painter->abs_x, painter->abs_y, painter->abs_width, painter->abs_height);
     epd_display_frame();
     epd_sleep();
 
-    free(frame_buff);
-
-    //portEXIT_CRITICAL_ISR(&paint_lock);
-    return;
+    epdpaint_destroy(painter);
 }

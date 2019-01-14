@@ -25,14 +25,15 @@
 
 static const char *TAG = "ESP-EPD";
 
-static EventGroupHandle_t s_wifi_event_group;
+static EventGroupHandle_t s_event_group;
 static const int WIFI_CONNECTED_BIT = BIT0;
+static const int PUSHBULLET_MSG_BIT = BIT1;
 static int s_wifi_retry_num = 0;
 static esp_err_t wifi_event_handler(void *ctx, system_event_t *event);
 static void wifi_init_sta();
 
 static void initialize_sntp(void);
-static void refresh_time_task(void *pvParameter);
+static void ui_task(void *pvParameter);
 
 static esp_err_t spiffs_init();
 
@@ -40,6 +41,8 @@ static esp_err_t ws_handler(ws_event_t *event);
 static void pushbullet_mirror_msg(char *json);
 
 void app_main() {
+    s_event_group = xEventGroupCreate();
+
     esp_err_t ret;
 
     // init NVS and WIFI
@@ -75,9 +78,10 @@ void app_main() {
     esp_ui_init();
 
     // start tasks
-    xTaskCreate(&refresh_time_task, "refresh_time_task", 2048, NULL, tskIDLE_PRIORITY + 1, NULL);
+    xEventGroupSetBits(s_event_group, PUSHBULLET_MSG_BIT);
+    xTaskCreate(&ui_task, "ui_task", 1024*5, NULL, tskIDLE_PRIORITY + 1, NULL);
 
-    xEventGroupWaitBits(s_wifi_event_group, WIFI_CONNECTED_BIT, false, true, portMAX_DELAY);
+    xEventGroupWaitBits(s_event_group, WIFI_CONNECTED_BIT, false, true, portMAX_DELAY);
     ws_client_config_t ws_cfg = {
         .uri = "wss://stream.pushbullet.com/websocket/"CONFIG_PUSHBULLET_TOKEN,
         .event_handle = ws_handler,
@@ -99,12 +103,12 @@ static esp_err_t wifi_event_handler(void *ctx, system_event_t *event)
         ESP_LOGI(TAG, "got ip:%s",
                  ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
         s_wifi_retry_num = 0;
-        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+        xEventGroupSetBits(s_event_group, WIFI_CONNECTED_BIT);
         break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
         {
             esp_wifi_connect();
-            xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+            xEventGroupClearBits(s_event_group, WIFI_CONNECTED_BIT);
             s_wifi_retry_num++;
             ESP_LOGI(TAG,"retry to connect to the AP, retry_counter=%d", s_wifi_retry_num);
             break;
@@ -117,8 +121,6 @@ static esp_err_t wifi_event_handler(void *ctx, system_event_t *event)
 
 void wifi_init_sta()
 {
-    s_wifi_event_group = xEventGroupCreate();
-
     tcpip_adapter_init();
     ESP_ERROR_CHECK(esp_event_loop_init(wifi_event_handler, NULL) );
 
@@ -149,17 +151,19 @@ static void initialize_sntp(void)
     setenv("TZ", "CST-8", 1); tzset();
 }
 
-void refresh_time_task(void *pvParameter) {
-    time_t now = 0;
-    struct tm timeinfo = { 0 };
-    char strftime_buf[64];
+void ui_task(void *pvParameter) {
+    EventBits_t uxBits;
+    const TickType_t xTicksToWait = 60*1000 / portTICK_PERIOD_MS; // refresh time every 60s.
     while (1) {
-        time(&now);
-        localtime_r(&now, &timeinfo);
-        strftime(strftime_buf, 64, "%c", &timeinfo);
-        //ESP_LOGI(TAG, "NTP: The current date/time in Shanghai is: %s", strftime_buf);
-        esp_ui_update();
-        vTaskDelay(60 * 1000 / portTICK_PERIOD_MS);
+        uxBits = xEventGroupWaitBits(s_event_group, PUSHBULLET_MSG_BIT | 0, pdTRUE, pdFALSE, xTicksToWait);
+        //printf("%02hhX ", uxBits);
+        if ( (uxBits & (PUSHBULLET_MSG_BIT|0)) != 0) {
+            // got new message
+            esp_ui_full_paint();
+        } else {
+            // no new message, refresh time
+            esp_ui_paint_time();
+        }
     }
 }
 
@@ -220,7 +224,7 @@ static void pushbullet_mirror_msg(char *json) {
     cJSON *push_type = cJSON_GetObjectItemCaseSensitive(push, "type");
     if (push_type && strncmp(push_type->valuestring ,"dismissal", 9) == 0) {
         ui_data.message[0] = 0;
-        esp_ui_update();
+        xEventGroupSetBits(s_event_group, PUSHBULLET_MSG_BIT);
         cJSON_Delete(root); return;
     }
     if (!push_type || strncmp(push_type->valuestring ,"mirror", 6) != 0) {cJSON_Delete(root); return;}
@@ -230,6 +234,6 @@ static void pushbullet_mirror_msg(char *json) {
 
     //printf(body->valuestring);
     strncpy(ui_data.message, body->valuestring, 128*3);
-    esp_ui_update();
+    xEventGroupSetBits(s_event_group, PUSHBULLET_MSG_BIT);
     cJSON_Delete(root); return;
 }
