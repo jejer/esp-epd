@@ -43,5 +43,6 @@ void epdpaint_draw_filled_circle(esp_painter_handle_t painter, int x, int y, int
 void epdpaint_draw_asc_char(esp_painter_handle_t painter, int x, int y, char asc_char, epd_font_t* font, int colored);
 void epdpaint_draw_gb2312_char(esp_painter_handle_t painter, int x, int y, uint16_t gb2312_char, epd_font_t* font, int colored);
 void epdpaint_draw_utf8_string(esp_painter_handle_t painter, int x, int y, int width, int height, const char* text, epd_font_t* en_font, epd_font_t* zh_font, int colored);
+void epdpaint_draw_img(esp_painter_handle_t painter, int x, int y, int width, int height, const uint8_t *img, int colored);
 
 #endif

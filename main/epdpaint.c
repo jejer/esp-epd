@@ -205,6 +205,24 @@ void epdpaint_draw_utf8_string(esp_painter_handle_t painter, int x, int y, int w
     }
 }
 
+void epdpaint_draw_img(esp_painter_handle_t painter, int x, int y, int width, int height, const uint8_t *img, int colored) {
+    const uint8_t* ptr = img;
+
+    for (int j = 0; j < height; j++) {
+        for (int i = 0; i < width; i++) {
+            if (*ptr & (0x80 >> (i % 8))) {
+                epdpaint_draw_pixel(painter, x + i, y + j, colored);
+            }
+            if (i % 8 == 7) {
+                ptr++;
+            }
+        }
+        if (width % 8 != 0) {
+            ptr++;
+        }
+    }
+}
+
 void epdpaint_draw_line(esp_painter_handle_t painter, int x0, int y0, int x1, int y1, int colored) {
     /* Bresenham algorithm */
     int dx = x1 - x0 >= 0 ? x1 - x0 : x0 - x1;
