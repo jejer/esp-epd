@@ -8,3 +8,6 @@ An EINK display driven by ESP32 SoC
 - Receive and display notification messages for Android and iPhone via PushBullet
 - Connect to Internet via WiFi
 - Support Chinese
+
+# SDK
+- https://github.com/espressif/ESP8266_RTOS_SDK
